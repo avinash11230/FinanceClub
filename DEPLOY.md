@@ -91,6 +91,23 @@ This keeps the service warm during the competition and is also what makes the
 
 ---
 
+## Email verification (optional)
+
+⚠️ **Render's free tier blocks outbound SMTP**, so Gmail/SMTP will hang. Use an
+HTTP email API instead — **Brevo** (free, 300 emails/day, no domain needed):
+
+1. **brevo.com** → sign up (free).
+2. **Senders** → add and **verify a sender email** (Brevo emails you a link to click).
+3. **SMTP & API → API Keys** → generate a key (`xkeysib-…`).
+4. In **Render → Environment**, add (and delete any `SMTP_*` vars):
+   - `BREVO_API_KEY` = your key
+   - `SENDER_EMAIL` = the verified sender email
+   - `SENDER_NAME` = `IITM Invest Arena`
+5. Save → Render redeploys → the admin **Overview** shows *"Email verification ON ·
+   brevo"*, and new signups receive a 6-digit code. Existing accounts stay valid.
+
+Leave all email vars unset to disable verification (signups auto-verify).
+
 ## Updating after changes
 Push to GitHub → Render auto-rebuilds and redeploys. Turso data persists across
 deploys (it's external).
