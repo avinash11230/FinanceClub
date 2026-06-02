@@ -9,3 +9,5 @@ server/data/
 .DS_Store
 .claude/
 *.local
+# Private organiser material — answer keys, news drops. NEVER commit.
+private/

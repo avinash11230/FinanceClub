@@ -3,14 +3,14 @@
 //   or `npm run reset` (--reset wipes all data first).
 import 'dotenv/config';
 import { pathToFileURL } from 'node:url';
-import { sqlite, migrate, all, get, run } from './db.js';
+import { migrate, all, get, run } from './db.js';
 import { hashPassword } from './auth.js';
 
 // Seeds an empty database. Idempotent — only inserts what is missing.
 // Called automatically on server boot (auto-seed) and by the CLI
 // (`npm run seed`, or `npm run reset` which wipes first).
 export async function seed({ reset = false } = {}) {
-  migrate();
+  await migrate();
 
   if (reset) {
     console.log('Resetting all data...');
@@ -18,7 +18,7 @@ export async function seed({ reset = false } = {}) {
       'scores', 'snapshot_company_returns', 'snapshots', 'allocations', 'submissions',
       'round_company_returns', 'rounds', 'companies', 'participants', 'admins', 'settings',
     ]) {
-      sqlite.exec(`DELETE FROM ${t};`);
+      await run(`DELETE FROM ${t}`);
     }
   }
 
@@ -27,9 +27,9 @@ const adminEmail = (process.env.SEED_ADMIN_EMAIL || 'admin@financeclub.iitm.ac.i
 const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123';
 const adminName = process.env.SEED_ADMIN_NAME || 'Competition Admin';
 
-if (!get('SELECT id FROM admins WHERE email = ?', [adminEmail])) {
+if (!(await get('SELECT id FROM admins WHERE email = ?', [adminEmail]))) {
   const hash = await hashPassword(adminPassword);
-  run('INSERT INTO admins (name, email, password_hash) VALUES (?, ?, ?)', [adminName, adminEmail, hash]);
+  await run('INSERT INTO admins (name, email, password_hash) VALUES (?, ?, ?)', [adminName, adminEmail, hash]);
   console.log(`Seeded admin: ${adminEmail}  (password: ${adminPassword})`);
 } else {
   console.log(`Admin already exists: ${adminEmail}`);
@@ -132,25 +132,26 @@ const companies = [
   },
 ];
 
-if (all('SELECT id FROM companies').length === 0) {
-  companies.forEach((c, i) => {
-    run(
+if ((await all('SELECT id FROM companies')).length === 0) {
+  for (let i = 0; i < companies.length; i++) {
+    const c = companies[i];
+    await run(
       `INSERT INTO companies (name, ticker, logo_url, sector, description, metrics, history, sort_order)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [c.name, c.ticker, c.logo_url, c.sector, c.description, c.metrics, c.history, i]
     );
-  });
+  }
   console.log(`Seeded ${companies.length} companies.`);
 } else {
   console.log('Companies already exist — skipping.');
 }
 
 // ---- Round 1 (pending) -----------------------------------------------------
-if (all('SELECT id FROM rounds').length === 0) {
-  const r = run('INSERT INTO rounds (round_number, status) VALUES (1, ?)', ['pending']);
+if ((await all('SELECT id FROM rounds')).length === 0) {
+  const r = await run('INSERT INTO rounds (round_number, status) VALUES (1, ?)', ['pending']);
   const roundId = Number(r.lastInsertRowid);
-  for (const c of all('SELECT id FROM companies')) {
-    run('INSERT OR IGNORE INTO round_company_returns (round_id, company_id) VALUES (?, ?)', [roundId, c.id]);
+  for (const c of await all('SELECT id FROM companies')) {
+    await run('INSERT OR IGNORE INTO round_company_returns (round_id, company_id) VALUES (?, ?)', [roundId, c.id]);
   }
   console.log('Seeded Round 1 (status: pending). Open it from the admin Round Manager.');
 } else {

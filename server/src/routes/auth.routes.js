@@ -36,13 +36,13 @@ router.post('/signup', async (req, res) => {
     });
   }
 
-  const existing = get('SELECT id FROM participants WHERE email = ?', [email]);
+  const existing = await get('SELECT id FROM participants WHERE email = ?', [email]);
   if (existing) {
     return res.status(409).json({ error: 'An account with this email already exists.' });
   }
 
   const password_hash = await hashPassword(password);
-  const result = run(
+  const result = await run(
     'INSERT INTO participants (name, email, password_hash) VALUES (?, ?, ?)',
     [name, email, password_hash]
   );
@@ -58,7 +58,7 @@ router.post('/login', async (req, res) => {
   }
   const { email, password } = parsed.data;
 
-  const user = get('SELECT * FROM participants WHERE email = ?', [email]);
+  const user = await get('SELECT * FROM participants WHERE email = ?', [email]);
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     return res.status(401).json({ error: 'Invalid email or password.' });
   }

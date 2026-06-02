@@ -54,13 +54,13 @@ function readToken(req, role) {
 }
 
 // Middleware: require a logged-in participant.
-export function requireParticipant(req, res, next) {
+export async function requireParticipant(req, res, next) {
   const token = readToken(req, 'participant');
   if (!token) return res.status(401).json({ error: 'Not authenticated.' });
   try {
     const payload = jwt.verify(token, SECRETS.participant);
     if (payload.role !== 'participant') throw new Error('wrong role');
-    const user = get('SELECT id, email, name FROM participants WHERE id = ?', [payload.id]);
+    const user = await get('SELECT id, email, name FROM participants WHERE id = ?', [payload.id]);
     if (!user) throw new Error('not found');
     req.participant = user;
     next();
@@ -70,13 +70,13 @@ export function requireParticipant(req, res, next) {
 }
 
 // Middleware: require a logged-in admin.
-export function requireAdmin(req, res, next) {
+export async function requireAdmin(req, res, next) {
   const token = readToken(req, 'admin');
   if (!token) return res.status(401).json({ error: 'Admin authentication required.' });
   try {
     const payload = jwt.verify(token, SECRETS.admin);
     if (payload.role !== 'admin') throw new Error('wrong role');
-    const admin = get('SELECT id, email, name FROM admins WHERE id = ?', [payload.id]);
+    const admin = await get('SELECT id, email, name FROM admins WHERE id = ?', [payload.id]);
     if (!admin) throw new Error('not found');
     req.admin = admin;
     next();

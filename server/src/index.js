@@ -11,7 +11,7 @@ import authRoutes from './routes/auth.routes.js';
 import participantRoutes from './routes/participant.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 
-migrate();
+await migrate();
 // Auto-seed an empty database on first boot so a fresh deploy is usable
 // immediately (admin + companies + Round 1). Disable with AUTO_SEED=0.
 if (process.env.AUTO_SEED !== '0') {

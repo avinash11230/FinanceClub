@@ -5,15 +5,16 @@ Participants distribute ₹10,00,000 of virtual capital across 5 companies each
 round; admins control the rounds, set hidden returns, and publish leaderboards
 via a fully automated scoring engine.
 
-Built with **React + Tailwind** (frontend) and **Node.js + Express + SQLite**
-(backend), with JWT auth in secure httpOnly cookies.
+Built with **React + Tailwind** (frontend) and **Node.js + Express + libSQL**
+(backend), with JWT auth in secure httpOnly cookies. The database is SQLite-
+compatible: a local file in development, and free hosted **Turso** in production.
 
 ---
 
 ## Quick start
 
-> Prerequisites: **Node.js 22+** (uses the built-in `node:sqlite` — no database
-> server to install). Check with `node --version`.
+> Prerequisites: **Node.js 18+** (libSQL ships prebuilt — no database server to
+> install for local dev; it uses a local file). Check with `node --version`.
 
 Open **two terminals**.
 
@@ -115,7 +116,7 @@ FINANCE CLUB/
 ├── server/                 # Express API
 │   ├── src/
 │   │   ├── index.js        # app entry, route mounting, CORS
-│   │   ├── db.js           # node:sqlite wrapper + schema (swap point for Postgres)
+│   │   ├── db.js           # libSQL data layer + schema (file DB / Turso)
 │   │   ├── auth.js         # bcrypt, JWT, httpOnly cookies, middleware
 │   │   ├── scoring.js      # the 6-step scoring engine
 │   │   ├── seed.js         # seeds admin + 5 demo companies + Round 1
@@ -144,15 +145,15 @@ Useful scripts:
 
 ## Deploying to production
 
-- **Database:** for a hosted deployment, swap SQLite for **PostgreSQL** by
-  rewriting `server/src/db.js` (the rest of the app only uses the `all/get/run/tx`
-  helpers and `?` placeholders, which map cleanly to `pg`). The schema in
-  `migrate()` is standard SQL.
-- **Auth cookies:** set `NODE_ENV=production` so cookies become `Secure` +
-  `SameSite=None` (requires HTTPS). Set strong `JWT_SECRET` / `JWT_ADMIN_SECRET`.
-- **Hosting:** frontend on Vercel (build `client`), backend on Railway/Render.
-  Set `CLIENT_ORIGIN` to the deployed frontend URL and point the frontend at the
-  API (replace the Vite dev proxy with `VITE_API_URL` or a rewrite).
+See **[DEPLOY.md](DEPLOY.md)** for the full free-tier walkthrough. In short:
+
+- **One service** — the Express server serves the built React site *and* the API
+  (single origin, so cookies just work). Packaged as a `Dockerfile`.
+- **Database** — set `DATABASE_URL` + `DATABASE_AUTH_TOKEN` to a free **Turso**
+  (libSQL) database; no persistent disk needed, so a free web host works.
+- **Auth cookies** — set `NODE_ENV=production` for `Secure` cookies over HTTPS,
+  and strong `JWT_SECRET` / `JWT_ADMIN_SECRET`.
+- **Hosting** — Render free tier (or Railway). The app auto-seeds on first boot.
 
 ---
 

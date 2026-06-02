@@ -12,22 +12,22 @@ const CAPITAL = Number(process.env.STARTING_CAPITAL || 1000000);
 router.use(requireParticipant);
 
 // The round currently accepting allocations, else the most recent round.
-function currentRound() {
+async function currentRound() {
   return (
-    get(`SELECT * FROM rounds WHERE status = 'open' ORDER BY round_number DESC LIMIT 1`) ||
-    get(`SELECT * FROM rounds ORDER BY round_number DESC LIMIT 1`)
+    (await get(`SELECT * FROM rounds WHERE status = 'open' ORDER BY round_number DESC LIMIT 1`)) ||
+    (await get(`SELECT * FROM rounds ORDER BY round_number DESC LIMIT 1`))
   );
 }
 
 // Public-safe company fields (never exposes returns/multipliers).
-function publicCompanies() {
+async function publicCompanies() {
   return all(
     `SELECT id, name, ticker, logo_url, sector, description, metrics, history, sort_order
        FROM companies ORDER BY sort_order, id`
   );
 }
 
-function myAllocations(participantId, roundId) {
+async function myAllocations(participantId, roundId) {
   return all(
     `SELECT company_id, amount, confidence FROM allocations
       WHERE participant_id = ? AND round_id = ?`,
@@ -36,19 +36,19 @@ function myAllocations(participantId, roundId) {
 }
 
 // GET /api/me/dashboard
-router.get('/dashboard', (req, res) => {
+router.get('/dashboard', async (req, res) => {
   const me = req.participant;
-  const companies = publicCompanies();
-  const round = currentRound();
+  const companies = await publicCompanies();
+  const round = await currentRound();
 
   let submission = null;
   let allocations = [];
   if (round) {
-    submission = get(
+    submission = await get(
       'SELECT id, submitted_at FROM submissions WHERE participant_id = ? AND round_id = ?',
       [me.id, round.id]
     );
-    if (submission) allocations = myAllocations(me.id, round.id);
+    if (submission) allocations = await myAllocations(me.id, round.id);
   }
 
   const locked = !round || round.status !== 'open' || !!submission;
@@ -73,8 +73,8 @@ router.get('/dashboard', (req, res) => {
 });
 
 // GET /api/me/companies  (full details list for modal/side panel)
-router.get('/companies', (req, res) => {
-  res.json({ companies: publicCompanies() });
+router.get('/companies', async (req, res) => {
+  res.json({ companies: await publicCompanies() });
 });
 
 // POST /api/me/allocations  — submit (and lock) allocations for the open round.
@@ -90,7 +90,7 @@ const allocationSchema = z.object({
     .min(1),
 });
 
-router.post('/allocations', (req, res) => {
+router.post('/allocations', async (req, res) => {
   const me = req.participant;
   const parsed = allocationSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -98,12 +98,12 @@ router.post('/allocations', (req, res) => {
   }
   const { allocations } = parsed.data;
 
-  const round = currentRound();
+  const round = await currentRound();
   if (!round || round.status !== 'open') {
     return res.status(409).json({ error: 'The reallocation window is not open right now.' });
   }
 
-  const already = get(
+  const already = await get(
     'SELECT id FROM submissions WHERE participant_id = ? AND round_id = ?',
     [me.id, round.id]
   );
@@ -112,7 +112,7 @@ router.post('/allocations', (req, res) => {
   }
 
   // Validate companies are real and unique.
-  const validIds = new Set(all('SELECT id FROM companies').map((c) => c.id));
+  const validIds = new Set((await all('SELECT id FROM companies')).map((c) => c.id));
   const seen = new Set();
   for (const a of allocations) {
     if (!validIds.has(a.company_id)) return res.status(400).json({ error: 'Unknown company in allocation.' });
@@ -128,15 +128,15 @@ router.post('/allocations', (req, res) => {
     });
   }
 
-  tx(() => {
-    const sub = run(
+  await tx(async (q) => {
+    const sub = await q.run(
       'INSERT INTO submissions (participant_id, round_id) VALUES (?, ?)',
       [me.id, round.id]
     );
     const submissionId = sub.lastInsertRowid;
     for (const a of allocations) {
       if (a.amount <= 0) continue; // store only funded positions
-      run(
+      await q.run(
         `INSERT INTO allocations (submission_id, participant_id, round_id, company_id, amount, confidence)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [submissionId, me.id, round.id, a.company_id, a.amount, a.confidence]
@@ -148,14 +148,14 @@ router.post('/allocations', (req, res) => {
 });
 
 // GET /api/me/leaderboard — latest published snapshot, both boards.
-router.get('/leaderboard', (req, res) => {
-  const snap = get('SELECT id, round_id, created_at FROM snapshots ORDER BY id DESC LIMIT 1');
+router.get('/leaderboard', async (req, res) => {
+  const snap = await get('SELECT id, round_id, created_at FROM snapshots ORDER BY id DESC LIMIT 1');
   if (!snap) {
     return res.json({ published: false, returns: [], overall: [], snapshot: null });
   }
-  const round = get('SELECT round_number FROM rounds WHERE id = ?', [snap.round_id]);
+  const round = await get('SELECT round_number FROM rounds WHERE id = ?', [snap.round_id]);
 
-  const rows = all(
+  const rows = await all(
     `SELECT s.participant_id, p.name, s.portfolio_return, s.overall_score, s.title,
             s.rank_returns, s.rank_overall, s.prev_rank_returns, s.prev_rank_overall
        FROM scores s JOIN participants p ON p.id = s.participant_id
@@ -198,22 +198,22 @@ router.get('/leaderboard', (req, res) => {
 });
 
 // GET /api/me/profile — allocation history, score breakdown, confidence vs returns.
-router.get('/profile', (req, res) => {
+router.get('/profile', async (req, res) => {
   const me = req.participant;
-  const companies = publicCompanies();
+  const companies = await publicCompanies();
 
-  // Allocation history: one entry per round the participant submitted.
-  const subs = all(
+  const subs = await all(
     `SELECT s.round_id, r.round_number, s.submitted_at
        FROM submissions s JOIN rounds r ON r.id = s.round_id
       WHERE s.participant_id = ? ORDER BY r.round_number`,
     [me.id]
   );
-  const history = subs.map((sub) => {
-    const allocs = myAllocations(me.id, sub.round_id);
+  const history = [];
+  for (const sub of subs) {
+    const allocs = await myAllocations(me.id, sub.round_id);
     const byCompany = {};
     for (const a of allocs) byCompany[a.company_id] = { amount: a.amount, confidence: a.confidence };
-    return {
+    history.push({
       round_id: sub.round_id,
       round_number: sub.round_number,
       submitted_at: sub.submitted_at,
@@ -224,11 +224,10 @@ router.get('/profile', (req, res) => {
         pct: ((byCompany[c.id]?.amount || 0) / CAPITAL) * 100,
         confidence: byCompany[c.id]?.confidence || 0,
       })),
-    };
-  });
+    });
+  }
 
-  // Score breakdown across snapshots.
-  const scores = all(
+  const scores = await all(
     `SELECT sc.snapshot_id, sc.round_id, r.round_number, sn.created_at,
             sc.portfolio_return, sc.return_score, sc.risk_score, sc.consistency_score,
             sc.overall_score, sc.turnover, sc.max_alloc_pct, sc.companies_used, sc.title,
@@ -241,7 +240,6 @@ router.get('/profile', (req, res) => {
     [me.id]
   );
 
-  // Confidence vs actual returns: average confidence per round vs that round's return.
   const confidenceVsReturns = history.map((h) => {
     const funded = h.allocations.filter((a) => a.amount > 0);
     const weightedConf =
@@ -268,12 +266,12 @@ router.get('/profile', (req, res) => {
 });
 
 // GET /api/me/ghost — equal-weight benchmark, revealed only after competition ends.
-router.get('/ghost', (req, res) => {
-  const ended = getSetting('competition_ended', '0') === '1';
+router.get('/ghost', async (req, res) => {
+  const ended = (await getSetting('competition_ended', '0')) === '1';
   if (!ended) return res.json({ revealed: false, ghostReturn: null });
-  const snap = get('SELECT id FROM snapshots ORDER BY id DESC LIMIT 1');
+  const snap = await get('SELECT id FROM snapshots ORDER BY id DESC LIMIT 1');
   if (!snap) return res.json({ revealed: true, ghostReturn: null });
-  res.json({ revealed: true, ghostReturn: ghostPortfolioReturn(snap.id) });
+  res.json({ revealed: true, ghostReturn: await ghostPortfolioReturn(snap.id) });
 });
 
 export default router;

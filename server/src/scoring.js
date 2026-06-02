@@ -12,7 +12,7 @@
 //
 // It also assigns a cosmetic "analyst title" and computes leaderboard ranks
 // with deltas versus the previous snapshot.
-import { all, get, run, tx } from './db.js';
+import { all, get, tx } from './db.js';
 
 const CAPITAL = Number(process.env.STARTING_CAPITAL || 1000000);
 
@@ -44,8 +44,8 @@ function multiplierProduct(multipliersJson) {
 }
 
 // allocation %-by-company map for a participant in a given round.
-function allocPctMap(participantId, roundId) {
-  const rows = all(
+async function allocPctMap(participantId, roundId) {
+  const rows = await all(
     `SELECT company_id, amount FROM allocations WHERE participant_id = ? AND round_id = ?`,
     [participantId, roundId]
   );
@@ -55,7 +55,7 @@ function allocPctMap(participantId, roundId) {
 }
 
 // The most recent earlier round the participant submitted in (for turnover).
-function previousRoundForParticipant(participantId, roundNumber) {
+async function previousRoundForParticipant(participantId, roundNumber) {
   return get(
     `SELECT r.id, r.round_number
        FROM submissions s JOIN rounds r ON r.id = s.round_id
@@ -99,19 +99,26 @@ function pickTitle({ maxPct, companiesUsed, turnover, hasPrev, contrarian }) {
   return 'The Strategist';
 }
 
+// Assign dense ranks (1-based) by a numeric field, descending.
+function rankInPlace(rows, field, rankField) {
+  const sorted = [...rows].sort((a, b) => b[field] - a[field]);
+  sorted.forEach((row, i) => {
+    row[rankField] = i + 1;
+  });
+}
+
 /**
  * Run the full scoring calculation for a round and publish a snapshot.
  * Returns a summary object. Safe to re-run (creates a new snapshot each time).
  */
-export function scoreRound(roundId) {
-  const round = get('SELECT * FROM rounds WHERE id = ?', [roundId]);
+export async function scoreRound(roundId) {
+  const round = await get('SELECT * FROM rounds WHERE id = ?', [roundId]);
   if (!round) throw new Error('Round not found.');
 
-  // Companies + admin-set returns for this round.
-  const companies = all('SELECT id, name FROM companies ORDER BY sort_order, id');
+  const companies = await all('SELECT id, name FROM companies ORDER BY sort_order, id');
   if (companies.length === 0) throw new Error('No companies configured.');
 
-  const returnsRows = all(
+  const returnsRows = await all(
     'SELECT company_id, base_return, multipliers FROM round_company_returns WHERE round_id = ?',
     [roundId]
   );
@@ -124,8 +131,7 @@ export function scoreRound(roundId) {
     };
   }
 
-  // Participants who submitted this round.
-  const submitters = all(
+  const submitters = await all(
     `SELECT p.id, p.name, p.email
        FROM submissions s JOIN participants p ON p.id = s.participant_id
       WHERE s.round_id = ?`,
@@ -134,24 +140,24 @@ export function scoreRound(roundId) {
   const poolSize = submitters.length;
 
   // --- Steps 1-2: gross return per company (base * multiplier) -------------
-  const gross = {}; // company_id -> gross return %
+  const gross = {};
   for (const c of companies) {
     const r = returnsByCompany[c.id];
     gross[c.id] = r.base * r.mult;
   }
 
   // --- Step 3: crowd dilution ---------------------------------------------
-  const crowdersByCompany = {}; // company_id -> Set(participant_id)
+  const crowdersByCompany = {};
   for (const c of companies) crowdersByCompany[c.id] = new Set();
-  const allocMaps = {}; // participant_id -> {company_id: pct}
+  const allocMaps = {};
   for (const p of submitters) {
-    const map = allocPctMap(p.id, roundId);
+    const map = await allocPctMap(p.id, roundId);
     allocMaps[p.id] = map;
     for (const [cid, pct] of Object.entries(map)) {
       if (pct > SCORING.CROWD_ALLOC_THRESHOLD_PCT) crowdersByCompany[cid].add(p.id);
     }
   }
-  const companyMeta = {}; // company_id -> { crowders, ratio, diluted }
+  const companyMeta = {};
   for (const c of companies) {
     const crowders = crowdersByCompany[c.id].size;
     const ratio = poolSize > 0 ? (crowders / poolSize) * 100 : 0;
@@ -178,7 +184,6 @@ export function scoreRound(roundId) {
       const effective =
         gross[c.id] - (meta.diluted && isCrowder ? SCORING.CROWD_DILUTION_PP : 0);
       portfolioReturn += (pct / 100) * effective;
-      // Contrarian: a meaningful bet (>threshold) on a company few others crowded.
       if (pct > SCORING.CROWD_ALLOC_THRESHOLD_PCT && meta.ratio < 20) contrarian = true;
     }
 
@@ -186,9 +191,9 @@ export function scoreRound(roundId) {
     const risk = riskScore(maxPct, companiesUsed);
 
     // Step 6: consistency (turnover) score
-    const prevRound = previousRoundForParticipant(p.id, round.round_number);
+    const prevRound = await previousRoundForParticipant(p.id, round.round_number);
     const hasPrev = !!prevRound;
-    const turnover = hasPrev ? computeTurnover(map, allocPctMap(p.id, prevRound.id)) : 0;
+    const turnover = hasPrev ? computeTurnover(map, await allocPctMap(p.id, prevRound.id)) : 0;
     const consistency = hasPrev ? clamp(100 - turnover, 0, 100) : 100;
 
     const retScore = returnToScore(portfolioReturn);
@@ -217,10 +222,10 @@ export function scoreRound(roundId) {
   rankInPlace(results, 'portfolio_return', 'rank_returns');
   rankInPlace(results, 'overall_score', 'rank_overall');
 
-  const prevSnap = get('SELECT id FROM snapshots ORDER BY id DESC LIMIT 1');
+  const prevSnap = await get('SELECT id FROM snapshots ORDER BY id DESC LIMIT 1');
   const prevRanks = {};
   if (prevSnap) {
-    for (const row of all(
+    for (const row of await all(
       'SELECT participant_id, rank_returns, rank_overall FROM scores WHERE snapshot_id = ?',
       [prevSnap.id]
     )) {
@@ -229,14 +234,14 @@ export function scoreRound(roundId) {
   }
 
   // --- persist everything in one transaction -------------------------------
-  const snapshotId = tx(() => {
-    const ins = run('INSERT INTO snapshots (round_id) VALUES (?)', [roundId]);
+  const snapshotId = await tx(async (q) => {
+    const ins = await q.run('INSERT INTO snapshots (round_id) VALUES (?)', [roundId]);
     const sid = ins.lastInsertRowid;
 
     for (const c of companies) {
       const r = returnsByCompany[c.id];
       const meta = companyMeta[c.id];
-      run(
+      await q.run(
         `INSERT INTO snapshot_company_returns
            (snapshot_id, company_id, base_return, multiplier, gross_return, crowders_count, crowd_ratio, diluted)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -246,7 +251,7 @@ export function scoreRound(roundId) {
 
     for (const res of results) {
       const prev = prevRanks[res.participant_id];
-      run(
+      await q.run(
         `INSERT INTO scores
            (snapshot_id, participant_id, round_id, portfolio_return, return_score, risk_score,
             consistency_score, overall_score, turnover, max_alloc_pct, companies_used, title,
@@ -266,17 +271,9 @@ export function scoreRound(roundId) {
   return { snapshotId, roundId, scored: results.length, poolSize };
 }
 
-// Assign dense ranks (1-based) by a numeric field, descending.
-function rankInPlace(rows, field, rankField) {
-  const sorted = [...rows].sort((a, b) => b[field] - a[field]);
-  sorted.forEach((row, i) => {
-    row[rankField] = i + 1;
-  });
-}
-
 // Equal-weight benchmark return for a snapshot (20% each, never crowds => no dilution).
-export function ghostPortfolioReturn(snapshotId) {
-  const rows = all(
+export async function ghostPortfolioReturn(snapshotId) {
+  const rows = await all(
     'SELECT gross_return FROM snapshot_company_returns WHERE snapshot_id = ?',
     [snapshotId]
   );
