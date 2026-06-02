@@ -5,7 +5,6 @@ import { ParticipantRoute, AdminRoute } from './components/ProtectedRoute';
 
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import VerifyEmail from './pages/VerifyEmail';
 import Dashboard from './pages/Dashboard';
 import Leaderboard from './pages/Leaderboard';
 import Profile from './pages/Profile';
@@ -24,7 +23,6 @@ export default function App() {
       {/* Participant auth */}
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      <Route path="/verify" element={<VerifyEmail />} />
 
       {/* Participant app */}
       <Route

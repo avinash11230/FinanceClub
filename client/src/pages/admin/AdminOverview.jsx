@@ -65,20 +65,9 @@ export default function AdminOverview() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl">Overview</h1>
-          <p className="text-sm text-slate-400">Run the competition from here.</p>
-        </div>
-        {settings.verificationRequired ? (
-          <span className="chip border-gain/40 bg-gain/10 text-gain">
-            Email verification ON · {settings.emailTransport}
-          </span>
-        ) : (
-          <span className="chip border-amber/40 bg-amber/10 text-amber-soft">
-            Email verification OFF · signups auto-verify
-          </span>
-        )}
+      <div>
+        <h1 className="text-2xl">Overview</h1>
+        <p className="text-sm text-slate-400">Run the competition from here.</p>
       </div>
 
       {msg && <Banner {...msg} onClose={() => setMsg(null)} />}

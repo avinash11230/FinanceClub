@@ -39,15 +39,13 @@ export default function Participants() {
     return participants.filter((p) => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q));
   }, [participants, query]);
 
-  const unverified = participants.filter((p) => p.verified === 0).length;
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl">Participant Manager</h1>
           <p className="text-sm text-slate-400">
-            {participants.length} registered{unverified > 0 && <span className="text-amber"> · {unverified} unverified</span>}. Review details and remove invalid accounts.
+            {participants.length} registered. Review details and remove invalid accounts.
           </p>
         </div>
         <input
@@ -65,7 +63,6 @@ export default function Participants() {
           <thead>
             <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3">Participant</th>
-              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Rounds</th>
               <th className="px-4 py-3 text-right">Latest score</th>
               <th className="hidden px-4 py-3 md:table-cell">Title</th>
@@ -79,13 +76,6 @@ export default function Participants() {
                 <td className="px-4 py-3">
                   <div className="font-medium text-white">{p.name}</div>
                   <div className="text-xs text-slate-500">{p.email}</div>
-                </td>
-                <td className="px-4 py-3">
-                  {p.verified === 1 ? (
-                    <span className="chip border-gain/40 bg-gain/10 text-gain">Verified</span>
-                  ) : (
-                    <span className="chip border-amber/40 bg-amber/10 text-amber-soft">Unverified</span>
-                  )}
                 </td>
                 <td className="num px-4 py-3 text-right text-slate-300">{p.submissions}</td>
                 <td className="px-4 py-3 text-right">
