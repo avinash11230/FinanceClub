@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-ink-950 text-slate-200 font-sans antialiased;
+    background-image:
+      radial-gradient(900px 500px at 15% -10%, rgba(59, 130, 246, 0.10), transparent 60%),
+      radial-gradient(800px 500px at 100% 0%, rgba(245, 158, 11, 0.06), transparent 55%);
+    background-attachment: fixed;
+  }
+  /* Visible focus ring for keyboard users */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-soft ring-offset-2 ring-offset-ink-950;
+  }
+  h1, h2, h3 {
+    @apply font-semibold tracking-tight text-white;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-white/10 bg-ink-900/80 backdrop-blur-sm;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+           transition-colors duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-amber text-ink-950 hover:bg-amber-soft shadow-glow-amber;
+  }
+  .btn-secondary {
+    @apply btn bg-brand-deep/30 text-brand-soft border border-brand/30 hover:bg-brand-deep/50;
+  }
+  .btn-ghost {
+    @apply btn bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10;
+  }
+  .input {
+    @apply w-full rounded-xl border border-white/10 bg-ink-800/80 px-3.5 py-2.5 text-sm text-white
+           placeholder:text-slate-500 transition-colors duration-200
+           focus:border-brand/60 focus:bg-ink-800;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400;
+  }
+  .num {
+    @apply font-mono tabular-nums;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium;
+  }
+}
+
+/* Markdown content rendered in detail panels / recaps */
+.prose-arena h1, .prose-arena h2, .prose-arena h3 { @apply text-white font-semibold mt-4 mb-2; }
+.prose-arena p { @apply my-2 leading-relaxed text-slate-300; }
+.prose-arena ul { @apply my-2 list-disc pl-5 space-y-1 text-slate-300; }
+.prose-arena strong { @apply text-white font-semibold; }
+.prose-arena em { @apply text-amber-soft not-italic; }
+.prose-arena a { @apply text-brand-soft underline; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
