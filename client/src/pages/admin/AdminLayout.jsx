@@ -4,6 +4,7 @@ import Icon from '../../components/icons';
 
 const links = [
   { to: '/admin/overview', label: 'Overview', icon: Icon.Grid },
+  { to: '/admin/participants', label: 'Participants', icon: Icon.User },
   { to: '/admin/companies', label: 'Company Manager', icon: Icon.Building },
   { to: '/admin/rounds', label: 'Round Manager', icon: Icon.Calendar },
   { to: '/admin/returns', label: 'Returns Manager', icon: Icon.Sliders },

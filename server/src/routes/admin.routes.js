@@ -89,6 +89,42 @@ router.delete('/companies/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Participant Manager ---------------------------------------------------
+router.get('/participants', async (req, res) => {
+  const latestSnap = await get('SELECT id FROM snapshots ORDER BY id DESC LIMIT 1');
+  const participants = await all(
+    `SELECT p.id, p.name, p.email, p.verified, p.created_at,
+            (SELECT COUNT(*) FROM submissions s WHERE s.participant_id = p.id) AS submissions
+       FROM participants p
+      ORDER BY p.created_at DESC`
+  );
+  if (latestSnap) {
+    for (const p of participants) {
+      const sc = await get(
+        `SELECT overall_score, portfolio_return, rank_overall, title
+           FROM scores WHERE snapshot_id = ? AND participant_id = ?`,
+        [latestSnap.id, p.id]
+      );
+      p.score = sc || null;
+    }
+  }
+  res.json({ participants });
+});
+
+router.delete('/participants/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  const p = await get('SELECT id FROM participants WHERE id = ?', [id]);
+  if (!p) return res.status(404).json({ error: 'Participant not found.' });
+  // Explicit cascade (works regardless of FK enforcement).
+  await tx(async (q) => {
+    await q.run('DELETE FROM scores WHERE participant_id = ?', [id]);
+    await q.run('DELETE FROM allocations WHERE participant_id = ?', [id]);
+    await q.run('DELETE FROM submissions WHERE participant_id = ?', [id]);
+    await q.run('DELETE FROM participants WHERE id = ?', [id]);
+  });
+  res.json({ ok: true });
+});
+
 // ---- Round Manager ---------------------------------------------------------
 router.get('/rounds', async (req, res) => {
   const rounds = await all('SELECT * FROM rounds ORDER BY round_number');

@@ -70,6 +70,10 @@ export async function migrate() {
       email         TEXT NOT NULL UNIQUE,
       name          TEXT NOT NULL,
       password_hash TEXT NOT NULL,
+      verified       INTEGER NOT NULL DEFAULT 1,
+      verify_code    TEXT,
+      verify_expires TEXT,
+      verify_sent_at TEXT,
       created_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -174,6 +178,26 @@ export async function migrate() {
       value TEXT
     );
   `);
+
+  // Additive migrations for databases created before a column existed.
+  // (CREATE TABLE IF NOT EXISTS never alters an existing table.)
+  await ensureColumns('participants', [
+    ['verified', 'verified INTEGER NOT NULL DEFAULT 1'],
+    ['verify_code', 'verify_code TEXT'],
+    ['verify_expires', 'verify_expires TEXT'],
+    ['verify_sent_at', 'verify_sent_at TEXT'],
+  ]);
+}
+
+// Adds any missing columns to an existing table (libSQL has no ADD COLUMN IF NOT EXISTS).
+async function ensureColumns(table, columns) {
+  const info = await client.execute(`PRAGMA table_info(${table})`);
+  const existing = new Set(info.rows.map((c) => c.name));
+  for (const [name, def] of columns) {
+    if (!existing.has(name)) {
+      await client.execute(`ALTER TABLE ${table} ADD COLUMN ${def}`);
+    }
+  }
 }
 
 export async function getSetting(key, fallback = null) {

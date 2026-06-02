@@ -5,12 +5,14 @@ import { ParticipantRoute, AdminRoute } from './components/ProtectedRoute';
 
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import VerifyEmail from './pages/VerifyEmail';
 import Dashboard from './pages/Dashboard';
 import Leaderboard from './pages/Leaderboard';
 import Profile from './pages/Profile';
 
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminOverview from './pages/admin/AdminOverview';
+import Participants from './pages/admin/Participants';
 import Companies from './pages/admin/Companies';
 import Rounds from './pages/admin/Rounds';
 import Returns from './pages/admin/Returns';
@@ -22,6 +24,7 @@ export default function App() {
       {/* Participant auth */}
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/verify" element={<VerifyEmail />} />
 
       {/* Participant app */}
       <Route
@@ -47,6 +50,7 @@ export default function App() {
         }
       >
         <Route path="overview" element={<AdminOverview />} />
+        <Route path="participants" element={<Participants />} />
         <Route path="companies" element={<Companies />} />
         <Route path="rounds" element={<Rounds />} />
         <Route path="returns" element={<Returns />} />

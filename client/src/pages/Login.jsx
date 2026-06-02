@@ -19,6 +19,10 @@ export default function Login() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
+      if (err.data?.needsVerification) {
+        navigate('/verify', { state: { email: err.data.email || email } });
+        return;
+      }
       setError(err.message);
     } finally {
       setBusy(false);

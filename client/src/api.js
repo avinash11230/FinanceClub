@@ -6,12 +6,17 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Normalise error messages so components can show err.message directly.
+// Normalise error messages so components can show err.message directly,
+// while keeping the response body + status available as err.data / err.status.
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    const msg = err.response?.data?.error || err.message || 'Something went wrong.';
-    return Promise.reject(new Error(msg));
+    const data = err.response?.data;
+    const msg = data?.error || err.message || 'Something went wrong.';
+    const e = new Error(msg);
+    e.data = data;
+    e.status = err.response?.status;
+    return Promise.reject(e);
   }
 );
 

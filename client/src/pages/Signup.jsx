@@ -24,8 +24,12 @@ export default function Signup() {
     if (form.password !== form.confirm) return setError('Passwords do not match.');
     setBusy(true);
     try {
-      await signup(form.name, form.email, form.password);
-      navigate('/dashboard');
+      const result = await signup(form.name, form.email, form.password);
+      if (result?.needsVerification) {
+        navigate('/verify', { state: { email: result.email || form.email } });
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.message);
     } finally {

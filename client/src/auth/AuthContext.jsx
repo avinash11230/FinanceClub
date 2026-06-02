@@ -26,10 +26,19 @@ export function AuthProvider({ children }) {
     setUser(data.user);
     return data.user;
   };
+  // Returns either { user } (logged in) or { needsVerification, email }.
   const signup = async (name, email, password) => {
     const { data } = await api.post('/auth/signup', { name, email, password });
+    if (data.user) setUser(data.user);
+    return data;
+  };
+  const verifyEmail = async (email, code) => {
+    const { data } = await api.post('/auth/verify', { email, code });
     setUser(data.user);
     return data.user;
+  };
+  const resendCode = async (email) => {
+    await api.post('/auth/resend', { email });
   };
   const logout = async () => {
     await api.post('/auth/logout');
@@ -49,7 +58,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, admin, loading, refresh, login, signup, logout, adminLogin, adminLogout }}
+      value={{ user, admin, loading, refresh, login, signup, verifyEmail, resendCode, logout, adminLogin, adminLogout }}
     >
       {children}
     </AuthContext.Provider>
