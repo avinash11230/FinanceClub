@@ -41,7 +41,11 @@ async function issueVerification(participantId, email, name) {
     'UPDATE participants SET verify_code = ?, verify_expires = ?, verify_sent_at = ? WHERE id = ?',
     [code, plusMinutes(CODE_TTL_MIN), nowIso(), participantId]
   );
-  await sendVerificationEmail(email, name, code);
+  // Fire-and-forget: never block the HTTP response on email delivery (a slow or
+  // blocked provider must not hang signup). The user can hit "resend" if needed.
+  sendVerificationEmail(email, name, code).catch((e) =>
+    console.error(`[email] delivery failed for ${email}:`, e.message)
+  );
 }
 
 router.post('/signup', async (req, res) => {

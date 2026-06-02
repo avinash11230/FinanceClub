@@ -8,6 +8,7 @@ import {
   verifyPassword, issueToken, clearToken, requireAdmin,
 } from '../auth.js';
 import { scoreRound, ghostPortfolioReturn, SCORING } from '../scoring.js';
+import { verificationRequired, emailTransport } from '../email.js';
 
 const router = Router();
 const CAPITAL = Number(process.env.STARTING_CAPITAL || 1000000);
@@ -301,6 +302,8 @@ router.get('/settings', async (req, res) => {
     competition_ended: (await getSetting('competition_ended', '0')) === '1',
     scoring: SCORING,
     participants: (await get('SELECT COUNT(*) AS n FROM participants')).n,
+    emailTransport: emailTransport(),
+    verificationRequired: verificationRequired(),
   });
 });
 
