@@ -7,7 +7,7 @@ import { all, get, run, tx, getSetting, setSetting } from '../db.js';
 import {
   verifyPassword, issueToken, clearToken, requireAdmin,
 } from '../auth.js';
-import { scoreRound, ghostPortfolioReturn, SCORING } from '../scoring.js';
+import { scoreRound, ghostCumulativeReturn, SCORING } from '../scoring.js';
 
 const router = Router();
 const CAPITAL = Number(process.env.STARTING_CAPITAL || 1000000);
@@ -322,8 +322,7 @@ router.get('/settings', async (req, res) => {
 
 router.post('/competition/end', async (req, res) => {
   await setSetting('competition_ended', '1');
-  const snap = await get('SELECT id FROM snapshots ORDER BY id DESC LIMIT 1');
-  res.json({ ok: true, ghostReturn: snap ? await ghostPortfolioReturn(snap.id) : null });
+  res.json({ ok: true, ghostReturn: await ghostCumulativeReturn() });
 });
 
 router.post('/competition/reopen', async (req, res) => {

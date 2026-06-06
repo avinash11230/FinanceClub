@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { all, get, run, tx, getSetting } from '../db.js';
 import { requireParticipant } from '../auth.js';
-import { ghostPortfolioReturn, currentCapital, STARTING_CAPITAL } from '../scoring.js';
+import { ghostCumulativeReturn, currentCapital, STARTING_CAPITAL } from '../scoring.js';
 
 const router = Router();
 
@@ -277,9 +277,7 @@ router.get('/profile', async (req, res) => {
 router.get('/ghost', async (req, res) => {
   const ended = (await getSetting('competition_ended', '0')) === '1';
   if (!ended) return res.json({ revealed: false, ghostReturn: null });
-  const snap = await get('SELECT id FROM snapshots ORDER BY id DESC LIMIT 1');
-  if (!snap) return res.json({ revealed: true, ghostReturn: null });
-  res.json({ revealed: true, ghostReturn: await ghostPortfolioReturn(snap.id) });
+  res.json({ revealed: true, ghostReturn: await ghostCumulativeReturn() });
 });
 
 export default router;

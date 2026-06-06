@@ -283,11 +283,25 @@ export async function scoreRound(roundId) {
   return { snapshotId, roundId, scored: results.length, poolSize };
 }
 
-// Equal-weight benchmark return for a snapshot (20% each, never crowds).
+// Equal-weight benchmark return for a single snapshot (20% each, never crowds).
 export async function ghostPortfolioReturn(snapshotId) {
   const rows = await all('SELECT gross_return FROM snapshot_company_returns WHERE snapshot_id = ?', [snapshotId]);
   if (rows.length === 0) return null;
   return round2(rows.reduce((s, r) => s + r.gross_return, 0) / rows.length);
+}
+
+// Compounded equal-weight benchmark across ALL rounds played so far (%).
+export async function ghostCumulativeReturn() {
+  const snaps = await all('SELECT id FROM snapshots ORDER BY id ASC');
+  if (snaps.length === 0) return null;
+  let factor = 1;
+  for (const s of snaps) {
+    const rows = await all('SELECT gross_return FROM snapshot_company_returns WHERE snapshot_id = ?', [s.id]);
+    if (rows.length === 0) continue;
+    const avg = rows.reduce((a, r) => a + r.gross_return, 0) / rows.length;
+    factor *= 1 + avg / 100;
+  }
+  return round2((factor - 1) * 100);
 }
 
 // The participant's current capital = latest snapshot's capital_after, else start.

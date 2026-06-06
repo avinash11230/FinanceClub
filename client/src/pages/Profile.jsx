@@ -173,9 +173,9 @@ export default function Profile() {
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand/15 text-brand-soft"><Icon.Ghost width={20} height={20} /></span>
                 <div>
                   <h2 className="text-lg">Ghost portfolio benchmark</h2>
-                  <p className="text-sm text-slate-400">An equal-weight (20% each) portfolio would have returned{' '}
+                  <p className="text-sm text-slate-400">An equal-weight (20% each) portfolio held across the competition would have returned{' '}
                     <span className={`num font-semibold ${ghost.ghostReturn >= 0 ? 'text-gain' : 'text-loss'}`}>{formatPct(ghost.ghostReturn)}</span>
-                    {latest && <> — you {latest.portfolio_return >= ghost.ghostReturn ? 'beat' : 'trailed'} it by <span className="num font-semibold text-white">{formatPct(Math.abs(latest.portfolio_return - ghost.ghostReturn))}</span>.</>}
+                    {latest && <> — you {(latest.cumulative_return ?? 0) >= ghost.ghostReturn ? 'beat' : 'trailed'} it by <span className="num font-semibold text-white">{formatPct(Math.abs((latest.cumulative_return ?? 0) - ghost.ghostReturn))}</span>.</>}
                   </p>
                 </div>
               </div>

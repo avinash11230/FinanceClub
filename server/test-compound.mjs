@@ -91,4 +91,11 @@ const prof = (await A('GET', '/api/me/profile')).data;
 assert(near(prof.netWorth, 1166000), `profile net worth = 11,66,000 (${prof.netWorth})`);
 assert(prof.scores.length === 2 && near(prof.scores[0].capital_after, 1060000), 'profile records R1 net worth');
 
+// Ghost benchmark should compound equal-weight across both rounds:
+// R1 avg (20+5-5+10+0)/5=6%, R2 avg 10% -> (1.06*1.10)-1 = 16.6%
+await admin('POST', '/api/admin/competition/end');
+const ghost = (await A('GET', '/api/me/ghost')).data;
+assert(ghost.revealed && near(ghost.ghostReturn, 16.6, 0.2), `ghost compounded across rounds = +16.6% (${ghost.ghostReturn})`);
+await admin('POST', '/api/admin/competition/reopen');
+
 console.log('\nCompounding test done.');
