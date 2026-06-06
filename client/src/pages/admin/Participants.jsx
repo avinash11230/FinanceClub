@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import api from '../../api';
 import Icon from '../../components/icons';
 import { Banner } from './AdminOverview';
-import { formatPct } from '../../lib/format';
+import { formatINR, formatPct } from '../../lib/format';
 
 export default function Participants() {
   const [participants, setParticipants] = useState([]);
@@ -64,7 +64,7 @@ export default function Participants() {
             <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3">Participant</th>
               <th className="px-4 py-3 text-right">Rounds</th>
-              <th className="px-4 py-3 text-right">Latest score</th>
+              <th className="px-4 py-3 text-right">Net worth</th>
               <th className="hidden px-4 py-3 md:table-cell">Title</th>
               <th className="px-4 py-3">Joined</th>
               <th className="px-4 py-3 text-right">Action</th>
@@ -81,8 +81,8 @@ export default function Participants() {
                 <td className="px-4 py-3 text-right">
                   {p.score ? (
                     <div>
-                      <span className="num font-semibold text-white">{p.score.overall_score.toFixed(2)}</span>
-                      <span className="num ml-2 text-xs text-slate-500">#{p.score.rank_overall}</span>
+                      <span className="num font-semibold text-white">{formatINR(p.score.capital_after ?? 0)}</span>
+                      <span className="num ml-2 text-xs text-slate-500">#{p.score.rank_returns}</span>
                     </div>
                   ) : (
                     <span className="text-slate-600">—</span>

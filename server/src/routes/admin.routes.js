@@ -101,7 +101,8 @@ router.get('/participants', async (req, res) => {
   if (latestSnap) {
     for (const p of participants) {
       const sc = await get(
-        `SELECT overall_score, portfolio_return, rank_overall, title
+        `SELECT overall_score, portfolio_return, rank_overall, rank_returns, title,
+                capital_after, round_pnl, cumulative_return
            FROM scores WHERE snapshot_id = ? AND participant_id = ?`,
         [latestSnap.id, p.id]
       );
@@ -265,32 +266,47 @@ router.get('/analytics', async (req, res) => {
 
   if (!roundId) return res.json({ round_id: null, poolSize: 0, companies: [] });
 
-  const poolSize = (await get('SELECT COUNT(*) AS n FROM submissions WHERE round_id = ?', [roundId])).n;
   const companies = await all('SELECT id, name, ticker FROM companies ORDER BY sort_order, id');
 
-  const data = [];
-  for (const c of companies) {
-    const rows = await all(
-      'SELECT amount FROM allocations WHERE round_id = ? AND company_id = ?',
-      [roundId, c.id]
-    );
-    const investors = rows.length;
-    const totalAmount = rows.reduce((s, r) => s + r.amount, 0);
-    const crowders = rows.filter((r) => (r.amount / CAPITAL) * 100 > SCORING.CROWD_ALLOC_THRESHOLD_PCT).length;
-    const crowdRatio = poolSize > 0 ? (crowders / poolSize) * 100 : 0;
-    const avgPct = poolSize > 0 ? (totalAmount / (poolSize * CAPITAL)) * 100 : 0;
-    data.push({
+  // Each participant allocates their full (compounded) capital, so a participant's
+  // capital that round = the sum of their amounts. Percentages are amount / that sum.
+  const allocRows = await all(
+    'SELECT participant_id, company_id, amount FROM allocations WHERE round_id = ?',
+    [roundId]
+  );
+  const totalByParticipant = {};
+  for (const r of allocRows) totalByParticipant[r.participant_id] = (totalByParticipant[r.participant_id] || 0) + r.amount;
+  const poolSize = (await get('SELECT COUNT(*) AS n FROM submissions WHERE round_id = ?', [roundId])).n;
+
+  const agg = {};
+  for (const c of companies) agg[c.id] = { investors: 0, totalAmount: 0, crowders: 0, pctSum: 0 };
+  for (const r of allocRows) {
+    const cap = totalByParticipant[r.participant_id] || 1;
+    const pct = (r.amount / cap) * 100;
+    const a = agg[r.company_id];
+    if (!a) continue;
+    a.investors += 1;
+    a.totalAmount += r.amount;
+    a.pctSum += pct;
+    if (pct > SCORING.CROWD_ALLOC_THRESHOLD_PCT) a.crowders += 1;
+  }
+
+  const data = companies.map((c) => {
+    const a = agg[c.id];
+    const crowdRatio = poolSize > 0 ? (a.crowders / poolSize) * 100 : 0;
+    const avgPct = poolSize > 0 ? a.pctSum / poolSize : 0; // averaged over the whole pool
+    return {
       company_id: c.id,
       name: c.name,
       ticker: c.ticker,
-      investors,
-      total_amount: totalAmount,
+      investors: a.investors,
+      total_amount: a.totalAmount,
       avg_pct: Math.round(avgPct * 100) / 100,
-      crowders,
+      crowders: a.crowders,
       crowd_ratio: Math.round(crowdRatio * 100) / 100,
       will_dilute: crowdRatio > SCORING.CROWD_POOL_THRESHOLD_PCT,
-    });
-  }
+    };
+  });
 
   res.json({ round_id: roundId, poolSize, threshold: SCORING.CROWD_POOL_THRESHOLD_PCT, companies: data });
 });

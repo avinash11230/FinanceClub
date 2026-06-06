@@ -76,12 +76,17 @@ export default function Profile() {
           {/* Score breakdown */}
           {latest && (
             <div>
-              <h2 className="mb-3 text-lg">Latest score breakdown</h2>
+              <h2 className="mb-3 text-lg">Latest standing</h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <ScoreCard label="Overall score" value={latest.overall_score.toFixed(2)} accent="#F59E0B" sub={`Rank #${latest.rank_overall}`} big />
-                <ScoreCard label="Portfolio return" value={formatPct(latest.portfolio_return)} accent={latest.portfolio_return >= 0 ? '#22D3A5' : '#F87171'} sub={`Rank #${latest.rank_returns} · 60% weight`} />
-                <ScoreCard label="Risk score" value={latest.risk_score.toFixed(0)} accent="#3B82F6" sub="20% weight" />
-                <ScoreCard label="Consistency" value={latest.consistency_score.toFixed(0)} accent="#A78BFA" sub={`Turnover ${latest.turnover.toFixed(0)}% · 20% weight`} />
+                <ScoreCard label="Net worth" value={formatINR(latest.capital_after ?? data.netWorth)} accent="#F59E0B" sub={`Rank #${latest.rank_returns} · started at ${formatINR(data.startingCapital)}`} big />
+                <ScoreCard
+                  label="Last round P&L"
+                  value={`${latest.round_pnl >= 0 ? '+' : '−'}${formatINR(Math.abs(latest.round_pnl ?? 0))}`}
+                  accent={latest.round_pnl >= 0 ? '#22D3A5' : '#F87171'}
+                  sub={`${formatPct(latest.portfolio_return)} this round`}
+                />
+                <ScoreCard label="Overall return" value={formatPct(latest.cumulative_return ?? 0)} accent={(latest.cumulative_return ?? 0) >= 0 ? '#22D3A5' : '#F87171'} sub="since start" />
+                <ScoreCard label="Overall score" value={latest.overall_score.toFixed(2)} accent="#A78BFA" sub={`Rank #${latest.rank_overall} · 60/20/20`} />
               </div>
             </div>
           )}
@@ -89,7 +94,7 @@ export default function Profile() {
           {/* Allocation history */}
           <div className="panel p-5">
             <h2 className="text-lg">Allocation history</h2>
-            <p className="mb-4 text-sm text-slate-500">How you split your capital each round (% of ₹10,00,000).</p>
+            <p className="mb-4 text-sm text-slate-500">How you split your capital each round (% of that round's capital).</p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={allocChart} margin={{ top: 5, right: 8, left: -16, bottom: 0 }}>
@@ -136,10 +141,11 @@ export default function Profile() {
                 <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-3">Round</th>
                   <th className="px-4 py-3 text-right">Return</th>
-                  <th className="px-4 py-3 text-right">Risk</th>
-                  <th className="px-4 py-3 text-right">Consistency</th>
+                  <th className="px-4 py-3 text-right">P&L</th>
+                  <th className="px-4 py-3 text-right">Net worth</th>
+                  <th className="hidden px-4 py-3 text-right sm:table-cell">Risk</th>
+                  <th className="hidden px-4 py-3 text-right sm:table-cell">Consistency</th>
                   <th className="px-4 py-3 text-right">Overall</th>
-                  <th className="hidden px-4 py-3 sm:table-cell">Title</th>
                 </tr>
               </thead>
               <tbody>
@@ -147,10 +153,13 @@ export default function Profile() {
                   <tr key={s.snapshot_id} className="border-b border-white/5">
                     <td className="px-4 py-3 font-medium text-white">Round {s.round_number}</td>
                     <td className={`num px-4 py-3 text-right ${s.portfolio_return >= 0 ? 'text-gain' : 'text-loss'}`}>{formatPct(s.portfolio_return)}</td>
-                    <td className="num px-4 py-3 text-right text-slate-300">{s.risk_score.toFixed(0)}</td>
-                    <td className="num px-4 py-3 text-right text-slate-300">{s.consistency_score.toFixed(0)}</td>
+                    <td className={`num px-4 py-3 text-right ${(s.round_pnl ?? 0) > 0 ? 'text-gain' : (s.round_pnl ?? 0) < 0 ? 'text-loss' : 'text-slate-500'}`}>
+                      {(s.round_pnl ?? 0) > 0 ? '+' : (s.round_pnl ?? 0) < 0 ? '−' : ''}{(s.round_pnl ?? 0) === 0 ? '—' : formatINR(Math.abs(s.round_pnl))}
+                    </td>
+                    <td className="num px-4 py-3 text-right font-semibold text-white">{formatINR(s.capital_after ?? data.startingCapital)}</td>
+                    <td className="hidden num px-4 py-3 text-right text-slate-300 sm:table-cell">{s.risk_score.toFixed(0)}</td>
+                    <td className="hidden num px-4 py-3 text-right text-slate-300 sm:table-cell">{s.consistency_score.toFixed(0)}</td>
                     <td className="num px-4 py-3 text-right font-semibold text-white">{s.overall_score.toFixed(2)}</td>
-                    <td className="hidden px-4 py-3 sm:table-cell"><span className="chip border-white/10 bg-white/5 text-slate-300">{s.title}</span></td>
                   </tr>
                 ))}
               </tbody>

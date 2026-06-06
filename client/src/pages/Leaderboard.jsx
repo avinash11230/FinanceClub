@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../api';
 import Icon from '../components/icons';
-import { formatPct } from '../lib/format';
+import { formatINR, formatPct } from '../lib/format';
 
 export default function Leaderboard() {
   const [data, setData] = useState(null);
@@ -26,7 +26,7 @@ export default function Leaderboard() {
   }
 
   const rows = tab === 'returns' ? data.returns : data.overall;
-  const isReturns = tab === 'returns';
+  const isNetWorth = tab === 'returns';
 
   return (
     <div className="space-y-5">
@@ -34,36 +34,34 @@ export default function Leaderboard() {
         <div>
           <h1 className="text-2xl">Leaderboard</h1>
           <p className="text-sm text-slate-400">
-            Snapshot after Round {data.snapshot?.round_number} ·{' '}
+            After Round {data.snapshot?.round_number} ·{' '}
             {new Date(data.snapshot?.created_at + 'Z').toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
           </p>
         </div>
         <div className="flex rounded-xl border border-white/10 bg-ink-800/60 p-1">
-          <TabBtn active={isReturns} onClick={() => setTab('returns')} icon={Icon.Chart}>Highest Returns</TabBtn>
-          <TabBtn active={!isReturns} onClick={() => setTab('overall')} icon={Icon.Trophy}>Overall Score</TabBtn>
+          <TabBtn active={isNetWorth} onClick={() => setTab('returns')} icon={Icon.Wallet}>Net Worth</TabBtn>
+          <TabBtn active={!isNetWorth} onClick={() => setTab('overall')} icon={Icon.Trophy}>Overall Score</TabBtn>
         </div>
       </div>
 
       <div className="rounded-xl border border-amber/20 bg-amber/5 px-4 py-2.5 text-xs text-amber-soft">
-        Rankings update only when the organisers publish a snapshot — never in real time. Other participants' allocations stay private.
+        Net worth compounds across rounds — everyone started at {formatINR(data.startingCapital)}. Rankings update only when organisers publish a snapshot; other participants' allocations stay private.
       </div>
 
-      <div className="panel overflow-hidden">
+      <div className="panel overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3 w-20">Rank</th>
               <th className="px-4 py-3">Participant</th>
               <th className="hidden px-4 py-3 sm:table-cell">Title</th>
-              <th className="px-4 py-3 text-right">{isReturns ? 'Return' : 'Score'}</th>
+              <th className="px-4 py-3 text-right">This round</th>
+              <th className="px-4 py-3 text-right">{isNetWorth ? 'Net worth' : 'Score'}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr
-                key={r.participant_id}
-                className={`border-b border-white/5 transition-colors ${r.isMe ? 'bg-brand-deep/20' : 'hover:bg-white/[0.03]'}`}
-              >
+              <tr key={r.participant_id} className={`border-b border-white/5 transition-colors ${r.isMe ? 'bg-brand-deep/20' : 'hover:bg-white/[0.03]'}`}>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <RankNumber rank={r.rank} />
@@ -79,10 +77,21 @@ export default function Leaderboard() {
                   <span className="chip border-white/10 bg-white/5 text-slate-300">{r.title}</span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {isReturns ? (
-                    <span className={`num font-semibold ${r.value >= 0 ? 'text-gain' : 'text-loss'}`}>{formatPct(r.value)}</span>
+                  <span className={`num font-medium ${r.roundPnl > 0 ? 'text-gain' : r.roundPnl < 0 ? 'text-loss' : 'text-slate-500'}`}>
+                    {r.roundPnl > 0 ? '+' : r.roundPnl < 0 ? '−' : ''}{r.roundPnl === 0 ? '—' : formatINR(Math.abs(r.roundPnl))}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {isNetWorth ? (
+                    <div>
+                      <div className="num font-semibold text-white">{formatINR(r.netWorth)}</div>
+                      <div className={`num text-xs ${r.cumulativeReturn >= 0 ? 'text-gain' : 'text-loss'}`}>{formatPct(r.cumulativeReturn)}</div>
+                    </div>
                   ) : (
-                    <span className="num font-semibold text-white">{r.value.toFixed(2)}</span>
+                    <div>
+                      <div className="num font-semibold text-white">{r.value.toFixed(2)}</div>
+                      <div className="num text-xs text-slate-500">{formatINR(r.netWorth)}</div>
+                    </div>
                   )}
                 </td>
               </tr>
@@ -112,10 +121,7 @@ function RankNumber({ rank }) {
   const medal = rank <= 3;
   const colors = { 1: '#F59E0B', 2: '#CBD5E1', 3: '#D08A52' };
   return (
-    <span
-      className="num grid h-7 w-7 place-items-center rounded-lg text-sm font-semibold"
-      style={medal ? { backgroundColor: `${colors[rank]}22`, color: colors[rank] } : { color: '#94A3B8' }}
-    >
+    <span className="num grid h-7 w-7 place-items-center rounded-lg text-sm font-semibold" style={medal ? { backgroundColor: `${colors[rank]}22`, color: colors[rank] } : { color: '#94A3B8' }}>
       {rank}
     </span>
   );

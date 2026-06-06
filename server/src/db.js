@@ -187,6 +187,13 @@ export async function migrate() {
     ['verify_expires', 'verify_expires TEXT'],
     ['verify_sent_at', 'verify_sent_at TEXT'],
   ]);
+  // Compounded-wealth tracking per snapshot.
+  await ensureColumns('scores', [
+    ['capital_before', 'capital_before REAL'],
+    ['round_pnl', 'round_pnl REAL'],
+    ['capital_after', 'capital_after REAL'],
+    ['cumulative_return', 'cumulative_return REAL'],
+  ]);
 }
 
 // Adds any missing columns to an existing table (libSQL has no ADD COLUMN IF NOT EXISTS).

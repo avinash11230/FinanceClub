@@ -1,17 +1,15 @@
 // Participant data routes: dashboard, company details, allocation submission,
-// leaderboards, profile, and the post-competition ghost portfolio.
+// leaderboards (compounded net worth), profile, and the ghost portfolio.
 import { Router } from 'express';
 import { z } from 'zod';
 import { all, get, run, tx, getSetting } from '../db.js';
 import { requireParticipant } from '../auth.js';
-import { ghostPortfolioReturn } from '../scoring.js';
+import { ghostPortfolioReturn, currentCapital, STARTING_CAPITAL } from '../scoring.js';
 
 const router = Router();
-const CAPITAL = Number(process.env.STARTING_CAPITAL || 1000000);
 
 router.use(requireParticipant);
 
-// The round currently accepting allocations, else the most recent round.
 async function currentRound() {
   return (
     (await get(`SELECT * FROM rounds WHERE status = 'open' ORDER BY round_number DESC LIMIT 1`)) ||
@@ -19,7 +17,6 @@ async function currentRound() {
   );
 }
 
-// Public-safe company fields (never exposes returns/multipliers).
 async function publicCompanies() {
   return all(
     `SELECT id, name, ticker, logo_url, sector, description, metrics, history, sort_order
@@ -35,11 +32,25 @@ async function myAllocations(participantId, roundId) {
   );
 }
 
+// Latest scored row for a participant (their most recent net-worth state).
+async function latestScore(participantId) {
+  return get(
+    `SELECT sc.round_id, r.round_number, sc.portfolio_return, sc.round_pnl,
+            sc.capital_after, sc.cumulative_return, sc.rank_returns
+       FROM scores sc JOIN rounds r ON r.id = sc.round_id
+      WHERE sc.participant_id = ?
+      ORDER BY sc.snapshot_id DESC LIMIT 1`,
+    [participantId]
+  );
+}
+
 // GET /api/me/dashboard
 router.get('/dashboard', async (req, res) => {
   const me = req.participant;
   const companies = await publicCompanies();
   const round = await currentRound();
+  const capital = await currentCapital(me.id); // current portfolio value
+  const last = await latestScore(me.id);
 
   let submission = null;
   let allocations = [];
@@ -54,17 +65,21 @@ router.get('/dashboard', async (req, res) => {
   const locked = !round || round.status !== 'open' || !!submission;
 
   res.json({
-    capital: CAPITAL,
+    capital, // amount to allocate THIS round (compounded)
+    startingCapital: STARTING_CAPITAL,
+    lastRound: last
+      ? {
+          round_number: last.round_number,
+          pnl: last.round_pnl,
+          return: last.portfolio_return,
+          capital_after: last.capital_after,
+          cumulative_return: last.cumulative_return,
+          rank: last.rank_returns,
+        }
+      : null,
     companies,
     round: round
-      ? {
-          id: round.id,
-          number: round.round_number,
-          status: round.status,
-          closes_at: round.closes_at,
-          opened_at: round.opened_at,
-          recap: round.recap,
-        }
+      ? { id: round.id, number: round.round_number, status: round.status, closes_at: round.closes_at, opened_at: round.opened_at, recap: round.recap }
       : null,
     submitted: !!submission,
     locked,
@@ -72,30 +87,24 @@ router.get('/dashboard', async (req, res) => {
   });
 });
 
-// GET /api/me/companies  (full details list for modal/side panel)
 router.get('/companies', async (req, res) => {
   res.json({ companies: await publicCompanies() });
 });
 
-// POST /api/me/allocations  — submit (and lock) allocations for the open round.
 const allocationSchema = z.object({
   allocations: z
-    .array(
-      z.object({
-        company_id: z.number().int().positive(),
-        amount: z.number().min(0),
-        confidence: z.number().int().min(1).max(5),
-      })
-    )
+    .array(z.object({
+      company_id: z.number().int().positive(),
+      amount: z.number().min(0),
+      confidence: z.number().int().min(1).max(5),
+    }))
     .min(1),
 });
 
 router.post('/allocations', async (req, res) => {
   const me = req.participant;
   const parsed = allocationSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.issues[0].message });
-  }
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   const { allocations } = parsed.data;
 
   const round = await currentRound();
@@ -103,15 +112,11 @@ router.post('/allocations', async (req, res) => {
     return res.status(409).json({ error: 'The reallocation window is not open right now.' });
   }
 
-  const already = await get(
-    'SELECT id FROM submissions WHERE participant_id = ? AND round_id = ?',
-    [me.id, round.id]
-  );
+  const already = await get('SELECT id FROM submissions WHERE participant_id = ? AND round_id = ?', [me.id, round.id]);
   if (already) {
     return res.status(409).json({ error: 'You have already submitted for this round. Allocations are locked.' });
   }
 
-  // Validate companies are real and unique.
   const validIds = new Set((await all('SELECT id FROM companies')).map((c) => c.id));
   const seen = new Set();
   for (const a of allocations) {
@@ -120,22 +125,20 @@ router.post('/allocations', async (req, res) => {
     seen.add(a.company_id);
   }
 
-  // Total must equal exactly the starting capital (allow ₹1 rounding tolerance).
+  // Total must equal the participant's CURRENT capital (compounded).
+  const capital = await currentCapital(me.id);
   const total = allocations.reduce((s, a) => s + a.amount, 0);
-  if (Math.abs(total - CAPITAL) > 1) {
+  if (Math.abs(total - capital) > 1) {
     return res.status(400).json({
-      error: `Total allocation must equal ₹${CAPITAL.toLocaleString('en-IN')}. Currently ₹${Math.round(total).toLocaleString('en-IN')}.`,
+      error: `Total allocation must equal your capital of ₹${Math.round(capital).toLocaleString('en-IN')}. Currently ₹${Math.round(total).toLocaleString('en-IN')}.`,
     });
   }
 
   await tx(async (q) => {
-    const sub = await q.run(
-      'INSERT INTO submissions (participant_id, round_id) VALUES (?, ?)',
-      [me.id, round.id]
-    );
+    const sub = await q.run('INSERT INTO submissions (participant_id, round_id) VALUES (?, ?)', [me.id, round.id]);
     const submissionId = sub.lastInsertRowid;
     for (const a of allocations) {
-      if (a.amount <= 0) continue; // store only funded positions
+      if (a.amount <= 0) continue;
       await q.run(
         `INSERT INTO allocations (submission_id, participant_id, round_id, company_id, amount, confidence)
          VALUES (?, ?, ?, ?, ?, ?)`,
@@ -147,16 +150,15 @@ router.post('/allocations', async (req, res) => {
   res.status(201).json({ ok: true, locked: true });
 });
 
-// GET /api/me/leaderboard — latest published snapshot, both boards.
+// GET /api/me/leaderboard — latest snapshot. Net-worth board + composite board.
 router.get('/leaderboard', async (req, res) => {
   const snap = await get('SELECT id, round_id, created_at FROM snapshots ORDER BY id DESC LIMIT 1');
-  if (!snap) {
-    return res.json({ published: false, returns: [], overall: [], snapshot: null });
-  }
+  if (!snap) return res.json({ published: false, returns: [], overall: [], snapshot: null });
   const round = await get('SELECT round_number FROM rounds WHERE id = ?', [snap.round_id]);
 
   const rows = await all(
     `SELECT s.participant_id, p.name, s.portfolio_return, s.overall_score, s.title,
+            s.capital_after, s.round_pnl, s.cumulative_return,
             s.rank_returns, s.rank_overall, s.prev_rank_returns, s.prev_rank_overall
        FROM scores s JOIN participants p ON p.id = s.participant_id
       WHERE s.snapshot_id = ?`,
@@ -165,12 +167,11 @@ router.get('/leaderboard', async (req, res) => {
 
   const decorate = (row, rankField, prevField) => {
     const rank = row[rankField];
-    const prev = row[prevField];
-    let movement = 'same';
-    let delta = 0;
-    if (prev == null) movement = 'new';
-    else if (prev > rank) { movement = 'up'; delta = prev - rank; }
-    else if (prev < rank) { movement = 'down'; delta = rank - prev; }
+    const prevRank = row[prevField];
+    let movement = 'same', delta = 0;
+    if (prevRank == null) movement = 'new';
+    else if (prevRank > rank) { movement = 'up'; delta = prevRank - rank; }
+    else if (prevRank < rank) { movement = 'down'; delta = rank - prevRank; }
     return {
       participant_id: row.participant_id,
       name: row.name,
@@ -178,12 +179,15 @@ router.get('/leaderboard', async (req, res) => {
       rank,
       movement,
       delta,
+      netWorth: row.capital_after,
+      roundPnl: row.round_pnl,
+      cumulativeReturn: row.cumulative_return,
       isMe: row.participant_id === req.participant.id,
     };
   };
 
   const returns = rows
-    .map((r) => ({ ...decorate(r, 'rank_returns', 'prev_rank_returns'), value: r.portfolio_return }))
+    .map((r) => ({ ...decorate(r, 'rank_returns', 'prev_rank_returns') }))
     .sort((a, b) => a.rank - b.rank);
   const overall = rows
     .map((r) => ({ ...decorate(r, 'rank_overall', 'prev_rank_overall'), value: r.overall_score }))
@@ -191,13 +195,14 @@ router.get('/leaderboard', async (req, res) => {
 
   res.json({
     published: true,
+    startingCapital: STARTING_CAPITAL,
     snapshot: { id: snap.id, created_at: snap.created_at, round_number: round?.round_number },
     returns,
     overall,
   });
 });
 
-// GET /api/me/profile — allocation history, score breakdown, confidence vs returns.
+// GET /api/me/profile
 router.get('/profile', async (req, res) => {
   const me = req.participant;
   const companies = await publicCompanies();
@@ -211,6 +216,7 @@ router.get('/profile', async (req, res) => {
   const history = [];
   for (const sub of subs) {
     const allocs = await myAllocations(me.id, sub.round_id);
+    const total = allocs.reduce((s, a) => s + a.amount, 0) || 1;
     const byCompany = {};
     for (const a of allocs) byCompany[a.company_id] = { amount: a.amount, confidence: a.confidence };
     history.push({
@@ -221,7 +227,7 @@ router.get('/profile', async (req, res) => {
         company_id: c.id,
         name: c.name,
         amount: byCompany[c.id]?.amount || 0,
-        pct: ((byCompany[c.id]?.amount || 0) / CAPITAL) * 100,
+        pct: ((byCompany[c.id]?.amount || 0) / total) * 100,
         confidence: byCompany[c.id]?.confidence || 0,
       })),
     });
@@ -231,7 +237,8 @@ router.get('/profile', async (req, res) => {
     `SELECT sc.snapshot_id, sc.round_id, r.round_number, sn.created_at,
             sc.portfolio_return, sc.return_score, sc.risk_score, sc.consistency_score,
             sc.overall_score, sc.turnover, sc.max_alloc_pct, sc.companies_used, sc.title,
-            sc.rank_returns, sc.rank_overall
+            sc.rank_returns, sc.rank_overall,
+            sc.capital_before, sc.round_pnl, sc.capital_after, sc.cumulative_return
        FROM scores sc
        JOIN snapshots sn ON sn.id = sc.snapshot_id
        JOIN rounds r ON r.id = sc.round_id
@@ -257,15 +264,16 @@ router.get('/profile', async (req, res) => {
 
   res.json({
     user: me,
-    capital: CAPITAL,
+    capital: await currentCapital(me.id),
+    startingCapital: STARTING_CAPITAL,
     currentTitle: latest?.title || null,
+    netWorth: latest?.capital_after ?? STARTING_CAPITAL,
     history,
     scores,
     confidenceVsReturns,
   });
 });
 
-// GET /api/me/ghost — equal-weight benchmark, revealed only after competition ends.
 router.get('/ghost', async (req, res) => {
   const ended = (await getSetting('competition_ended', '0')) === '1';
   if (!ended) return res.json({ revealed: false, ghostReturn: null });

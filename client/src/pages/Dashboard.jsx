@@ -84,9 +84,18 @@ export default function Dashboard() {
       {/* Top summary */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="panel p-5 sm:col-span-1">
-          <div className="flex items-center gap-2 text-slate-400"><Icon.Wallet width={16} height={16} /><span className="text-xs uppercase tracking-wide">Virtual capital</span></div>
+          <div className="flex items-center gap-2 text-slate-400"><Icon.Wallet width={16} height={16} /><span className="text-xs uppercase tracking-wide">Portfolio value</span></div>
           <div className="num mt-2 text-3xl font-semibold text-white">{formatINR(capital)}</div>
-          <div className="mt-1 text-xs text-slate-500">Starting balance for every participant</div>
+          {data.lastRound ? (
+            <div className="mt-1 text-xs">
+              <span className={data.lastRound.pnl >= 0 ? 'text-gain' : 'text-loss'}>
+                {data.lastRound.pnl >= 0 ? '+' : '−'}{formatINR(Math.abs(data.lastRound.pnl))} ({data.lastRound.return >= 0 ? '+' : ''}{data.lastRound.return}%)
+              </span>
+              <span className="text-slate-500"> last round · {data.lastRound.cumulative_return >= 0 ? '+' : ''}{data.lastRound.cumulative_return}% overall</span>
+            </div>
+          ) : (
+            <div className="mt-1 text-xs text-slate-500">Your capital to allocate this round</div>
+          )}
         </div>
         <div className="panel p-5 sm:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
