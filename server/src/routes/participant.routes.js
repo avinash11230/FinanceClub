@@ -62,7 +62,9 @@ router.get('/dashboard', async (req, res) => {
     if (submission) allocations = await myAllocations(me.id, round.id);
   }
 
-  const locked = !round || round.status !== 'open' || !!submission;
+  // Editable as long as the window is open — participants may resubmit; the
+  // latest submission before close is what gets scored.
+  const locked = !round || round.status !== 'open';
 
   res.json({
     capital, // amount to allocate THIS round (compounded)
@@ -113,9 +115,6 @@ router.post('/allocations', async (req, res) => {
   }
 
   const already = await get('SELECT id FROM submissions WHERE participant_id = ? AND round_id = ?', [me.id, round.id]);
-  if (already) {
-    return res.status(409).json({ error: 'You have already submitted for this round. Allocations are locked.' });
-  }
 
   const validIds = new Set((await all('SELECT id FROM companies')).map((c) => c.id));
   const seen = new Set();
@@ -135,6 +134,9 @@ router.post('/allocations', async (req, res) => {
   }
 
   await tx(async (q) => {
+    // Latest-wins: clear any earlier submission for this round, then re-insert.
+    await q.run('DELETE FROM allocations WHERE participant_id = ? AND round_id = ?', [me.id, round.id]);
+    await q.run('DELETE FROM submissions WHERE participant_id = ? AND round_id = ?', [me.id, round.id]);
     const sub = await q.run('INSERT INTO submissions (participant_id, round_id) VALUES (?, ?)', [me.id, round.id]);
     const submissionId = sub.lastInsertRowid;
     for (const a of allocations) {
@@ -147,7 +149,7 @@ router.post('/allocations', async (req, res) => {
     }
   });
 
-  res.status(201).json({ ok: true, locked: true });
+  res.status(201).json({ ok: true, updated: !!already });
 });
 
 // GET /api/me/leaderboard — latest snapshot. Net-worth board + composite board.

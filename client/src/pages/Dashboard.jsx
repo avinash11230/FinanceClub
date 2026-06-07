@@ -31,7 +31,10 @@ export default function Dashboard() {
   useEffect(() => { load().catch((e) => setError(e.message)); }, []);
 
   const capital = data?.capital || 1000000;
-  const editable = data?.round?.status === 'open' && !done;
+  const windowOpen = data?.round?.status === 'open';
+  // Participants may resubmit any number of times while the window is open;
+  // the latest submission before close is the one that gets scored.
+  const editable = windowOpen;
 
   const total = useMemo(
     () => Object.values(amounts).reduce((s, v) => s + (Number(v) || 0), 0),
@@ -132,16 +135,25 @@ export default function Dashboard() {
 
       {!noRound && (
         <>
-          {done && (
+          {windowOpen && done && (
+            <div className="panel flex items-center gap-3 border-gain/30 bg-gain/5 p-4">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-gain/15 text-gain"><Icon.Check width={18} height={18} /></span>
+              <div>
+                <div className="font-medium text-white">Your Round {round.number} portfolio is in</div>
+                <div className="text-sm text-slate-400">You can keep adjusting and re-submitting until the window closes — your latest version is what counts.</div>
+              </div>
+            </div>
+          )}
+          {!windowOpen && done && (
             <div className="panel flex items-center gap-3 border-gain/30 bg-gain/5 p-4">
               <span className="grid h-9 w-9 place-items-center rounded-full bg-gain/15 text-gain"><Icon.Lock width={18} height={18} /></span>
               <div>
                 <div className="font-medium text-white">Allocations locked for Round {round.number}</div>
-                <div className="text-sm text-slate-400">You're set. Allocations unlock when the admin opens the next window.</div>
+                <div className="text-sm text-slate-400">The window has closed. Allocations unlock when the admin opens the next round.</div>
               </div>
             </div>
           )}
-          {!done && round.status !== 'open' && (
+          {!windowOpen && !done && (
             <div className="panel flex items-center gap-3 border-amber/30 bg-amber/5 p-4">
               <span className="grid h-9 w-9 place-items-center rounded-full bg-amber/15 text-amber"><Icon.Lock width={18} height={18} /></span>
               <div>
@@ -280,14 +292,6 @@ function CompanyCard({ company, index, capital, amount, confidence, editable, on
 }
 
 function AllocationTracker({ capital, total, remaining, pctFilled, valid, fundedCount, editable, done, busy, error, onEven, onClear, onSubmit }) {
-  if (done) {
-    return (
-      <div className="panel p-5">
-        <h3 className="text-base">Portfolio submitted</h3>
-        <p className="mt-1 text-sm text-slate-400">Your Round allocations are locked in across {fundedCount} {fundedCount === 1 ? 'company' : 'companies'}.</p>
-      </div>
-    );
-  }
   if (!editable) {
     return (
       <div className="panel p-5">
@@ -329,9 +333,11 @@ function AllocationTracker({ capital, total, remaining, pctFilled, valid, funded
       {error && <div className="mt-3 rounded-lg border border-loss/30 bg-loss/10 px-3 py-2 text-xs text-loss">{error}</div>}
 
       <button onClick={onSubmit} disabled={!valid || busy} className="btn-primary mt-4 w-full">
-        {busy ? 'Submitting…' : valid ? 'Lock in portfolio' : 'Allocate full capital to submit'}
+        {busy ? 'Saving…' : !valid ? 'Allocate full capital to submit' : done ? 'Update allocation' : 'Lock in portfolio'}
       </button>
-      <p className="mt-2 text-center text-[11px] text-slate-500">Once submitted, allocations lock until the next window.</p>
+      <p className="mt-2 text-center text-[11px] text-slate-500">
+        {done ? 'You can keep updating until the window closes — latest version counts.' : 'You can keep editing until the window closes.'}
+      </p>
     </div>
   );
 }
