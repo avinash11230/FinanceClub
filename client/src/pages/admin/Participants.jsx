@@ -39,21 +39,55 @@ export default function Participants() {
     return participants.filter((p) => p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q));
   }, [participants, query]);
 
+  const csvCell = (v) => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const exportTop = async (n) => {
+    try {
+      const { data } = await api.get(`/admin/export/top?n=${n}`);
+      if (!data.count) { setMsg({ type: 'error', text: 'No leaderboard published yet.' }); return; }
+      const header = ['Name', 'Email', 'Net Worth Rank', 'Overall Rank', `In Net-Worth Top ${n}`, `In Overall Top ${n}`, 'Net Worth', 'Overall Score'];
+      const rows = data.participants.map((p) => [
+        p.name, p.email, p.rank_returns, p.rank_overall,
+        p.in_networth_top ? 'Yes' : 'No', p.in_overall_top ? 'Yes' : 'No',
+        Math.round(p.net_worth), p.overall_score,
+      ]);
+      const csv = [header, ...rows].map((r) => r.map(csvCell).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invest-arena-top${n}-unique.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setMsg({ type: 'success', text: `Exported ${data.count} unique participants from the top ${n} of both boards.` });
+    } catch (e) {
+      setMsg({ type: 'error', text: e.message });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl">Participant Manager</h1>
           <p className="text-sm text-slate-400">
-            {participants.length} registered. Review details and remove invalid accounts.
+            {participants.length} registered. Review details, remove invalid accounts, or export winners.
           </p>
         </div>
-        <input
-          className="input max-w-xs"
-          placeholder="Search name or email…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <div className="flex items-center gap-2">
+          <button onClick={() => exportTop(30)} className="btn-secondary text-xs whitespace-nowrap">
+            <Icon.Chart width={14} height={14} /> Export top 30 (CSV)
+          </button>
+          <input
+            className="input max-w-xs"
+            placeholder="Search name or email…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
       </div>
 
       {msg && <Banner {...msg} onClose={() => setMsg(null)} />}

@@ -126,6 +126,45 @@ router.delete('/participants/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Top-N from BOTH leaderboards (latest snapshot), de-duplicated to unique people.
+router.get('/export/top', async (req, res) => {
+  const n = Math.max(1, Math.min(500, Math.floor(Number(req.query.n) || 30)));
+  const snap = await get('SELECT id FROM snapshots ORDER BY id DESC LIMIT 1');
+  if (!snap) return res.json({ n, count: 0, participants: [] });
+
+  const topReturns = await all(
+    `SELECT participant_id FROM scores WHERE snapshot_id = ? AND rank_returns IS NOT NULL ORDER BY rank_returns LIMIT ${n}`,
+    [snap.id]
+  );
+  const topOverall = await all(
+    `SELECT participant_id FROM scores WHERE snapshot_id = ? AND rank_overall IS NOT NULL ORDER BY rank_overall LIMIT ${n}`,
+    [snap.id]
+  );
+  const ids = new Set([...topReturns.map((r) => r.participant_id), ...topOverall.map((r) => r.participant_id)]);
+
+  const participants = [];
+  for (const id of ids) {
+    const p = await get('SELECT name, email FROM participants WHERE id = ?', [id]);
+    const s = await get(
+      'SELECT rank_returns, rank_overall, capital_after, overall_score FROM scores WHERE snapshot_id = ? AND participant_id = ?',
+      [snap.id, id]
+    );
+    if (!p || !s) continue;
+    participants.push({
+      name: p.name,
+      email: p.email,
+      rank_returns: s.rank_returns,
+      rank_overall: s.rank_overall,
+      net_worth: s.capital_after,
+      overall_score: s.overall_score,
+      in_networth_top: s.rank_returns != null && s.rank_returns <= n,
+      in_overall_top: s.rank_overall != null && s.rank_overall <= n,
+    });
+  }
+  participants.sort((a, b) => (a.rank_overall ?? 1e9) - (b.rank_overall ?? 1e9));
+  res.json({ n, count: participants.length, participants });
+});
+
 // ---- Round Manager ---------------------------------------------------------
 router.get('/rounds', async (req, res) => {
   const rounds = await all('SELECT * FROM rounds ORDER BY round_number');
